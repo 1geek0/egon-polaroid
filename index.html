@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Egon Zippel Polaroid Search</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lunr/lunr.min.js"></script>
+</head>
+
+<body>
+    <div class="cyber-grid"></div>
+    <div class="cyber-overlay"></div>
+
+    <div class="main-container">
+        <div class="header-section">
+            <h1 class="cyber-title">
+                <span class="title-main">EGON ZIPPEL</span>
+                <span class="title-sub">POLAROID ARCHIVE</span>
+                <span class="title-accent">Daily sketches and observations, 1989-2025</span>
+            </h1>
+        </div>
+
+        <div class="search-section">
+            <div class="search-container">
+                <div class="search-wrapper">
+                    <input type="text" id="searchInput" placeholder="Search sketches, notes, and observations..."
+                        class="cyber-input">
+                    <button id="searchButton" class="cyber-button">
+                        <span class="button-text">SEARCH</span>
+                        <span class="button-glow"></span>
+                    </button>
+                </div>
+                <div class="search-status">
+                    <div id="statusMessage" class="status-text"></div>
+                    <div id="resultsCount" class="results-counter"></div>
+                </div>
+                <div class="search-tips">
+                    <details>
+                        <summary>Search Tips</summary>
+                        <ul>
+                            <li><strong>Phrase search:</strong> Use quotes for exact phrases (e.g.,
+                                <code>"waiting for"</code>).
+                                This will find all occurrences regardless of capitalization.
+                            </li>
+                            <li><strong>Exact matching:</strong> Short words (under 6 letters) use exact matching to
+                                avoid false positives (e.g., "table" won't match "cable")</li>
+                            <li><strong>Fuzzy matching:</strong> Add <code>~</code> after any word for fuzzy matching
+                                (e.g., <code>table~</code> will match "cable", "stable")</li>
+                            <li><strong>Date search:</strong> Include years (e.g., <code>2011</code>) or months (e.g.,
+                                <code>april</code>, <code>apr</code>)
+                            </li>
+                            <li><strong>Long words:</strong> Words 6+ letters automatically use fuzzy matching for typos
+                            </li>
+                            <li><strong>Combine searches:</strong> Mix phrases and keywords (e.g.,
+                                <code>"waiting for" 2011</code>)
+                            </li>
+                        </ul>
+                    </details>
+                </div>
+
+                <!-- <div style="text-align: center; margin-top: 2rem;">
+                    <a href="connection_explorer.html" class="cyber-button">
+                        <span class="button-text">EXPLORE CONNECTIONS</span>
+                    </a>
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--studio-text-secondary);">
+                        Discover deeper patterns and relationships across the archive
+                    </p>
+                </div> -->
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div id="searchResults" class="cyber-results-grid">
+                <!-- Search results will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="search_logic.js"></script>
+</body>
+
+</html>
