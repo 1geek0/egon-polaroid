@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let allImageData = [];
     let lunrIndex;
+    let imageUrlCache = new Map(); // Cache for extracted image URLs
 
     function initializeLunrIndex(data) {
         lunrIndex = lunr(function () {
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadData() {
         statusMessage.textContent = 'Loading image data...';
         try {
-            const response = await fetch('https://gist.githubusercontent.com/1geek0/8e8ca14f1b1455111a338cf124dbf123/raw/d76241eb67f99e1231e1f0c6098a3cfd9759f3bb/image_metadata.json');
+            const response = await fetch('image_metadata.json');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -56,6 +57,152 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function extractImageUrlFromPage(pageUrl) {
+        // Check cache first
+        if (imageUrlCache.has(pageUrl)) {
+            return imageUrlCache.get(pageUrl);
+        }
+
+        try {
+            // Use a CORS proxy to fetch the page content
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(pageUrl)}`;
+            const response = await fetch(proxyUrl);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const htmlContent = data.contents;
+
+            // Parse the HTML to extract the image URL
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+            const imgElement = doc.getElementById('icLightBoxActiveImage');
+
+            if (imgElement && imgElement.src) {
+                const imageUrl = imgElement.src;
+                imageUrlCache.set(pageUrl, imageUrl);
+                return imageUrl;
+            } else {
+                console.warn(`No icLightBoxActiveImage found for ${pageUrl}`);
+                imageUrlCache.set(pageUrl, null);
+                return null;
+            }
+        } catch (error) {
+            console.error(`Failed to extract image URL from ${pageUrl}:`, error);
+            imageUrlCache.set(pageUrl, null);
+            return null;
+        }
+    }
+
+    function createImageElement(item) {
+        const link = document.createElement('a');
+        link.href = item.display_page_url;
+        link.target = '_blank';
+        link.title = `View details for ${item.filename} on EgonZippel.com`;
+        link.style.display = 'block';
+        link.style.textDecoration = 'none';
+
+        // Create a styled placeholder that looks better
+        const placeholder = document.createElement('div');
+        placeholder.style.cssText = `
+            width: 200px;
+            height: 150px;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            border: 2px solid #333;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #888;
+            font-family: Inter, sans-serif;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        `;
+
+        placeholder.innerHTML = `
+            <div style="font-size: 0.9em; font-weight: 500; margin-bottom: 8px; text-align: center; padding: 0 10px;">
+                ${item.filename}
+            </div>
+            <div style="font-size: 0.7em; opacity: 0.7; text-align: center;">
+                Loading preview...
+            </div>
+        `;
+
+        // Add hover effect
+        placeholder.addEventListener('mouseenter', () => {
+            placeholder.style.borderColor = '#0ff';
+            placeholder.style.transform = 'scale(1.02)';
+            placeholder.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
+        });
+
+        placeholder.addEventListener('mouseleave', () => {
+            placeholder.style.borderColor = '#333';
+            placeholder.style.transform = 'scale(1)';
+            placeholder.style.boxShadow = 'none';
+        });
+
+        // Start with placeholder, then try to load the actual image
+        link.appendChild(placeholder);
+
+        // Asynchronously extract and load the real image
+        extractImageUrlFromPage(item.display_page_url).then(imageUrl => {
+            if (imageUrl) {
+                // Create the actual image element
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.style.cssText = `
+                    width: 200px;
+                    height: 150px;
+                    object-fit: cover;
+                    border-radius: 8px;
+                    border: 2px solid #333;
+                    transition: all 0.3s ease;
+                `;
+
+                img.onload = function () {
+                    // Replace placeholder with actual image
+                    if (link.contains(placeholder)) {
+                        link.removeChild(placeholder);
+                        link.appendChild(img);
+                    }
+                };
+
+                img.onerror = function () {
+                    // Keep placeholder but update message
+                    const loadingDiv = placeholder.querySelector('div:last-child');
+                    if (loadingDiv) {
+                        loadingDiv.textContent = 'View on EgonZippel.com →';
+                    }
+                };
+
+                // Add hover effects to the image
+                img.addEventListener('mouseenter', () => {
+                    img.style.borderColor = '#0ff';
+                    img.style.transform = 'scale(1.02)';
+                    img.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
+                });
+
+                img.addEventListener('mouseleave', () => {
+                    img.style.borderColor = '#333';
+                    img.style.transform = 'scale(1)';
+                    img.style.boxShadow = 'none';
+                });
+            } else {
+                // Update placeholder to show it's ready to click
+                const loadingDiv = placeholder.querySelector('div:last-child');
+                if (loadingDiv) {
+                    loadingDiv.textContent = 'View on EgonZippel.com →';
+                }
+            }
+        });
+
+        return link;
+    }
+
     function displayResults(resultsToDisplay, isInitialDisplay = false) {
         searchResultsContainer.innerHTML = '';
         if (isInitialDisplay) {
@@ -73,33 +220,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-
         resultsToDisplay.forEach(item => {
             const resultItemDiv = document.createElement('div');
             resultItemDiv.className = 'result-item';
 
-            const link = document.createElement('a');
-            link.href = item.display_page_url;
-            link.target = '_blank';
-            link.title = `View details for ${item.filename} on EgonZippel.com`;
-
-            const img = document.createElement('img');
-            img.src = item.local_path;
-            img.alt = item.filename;
-            img.onerror = function () {
-                this.style.border = "1px dashed #ccc";
-                this.style.width = "150px";
-                this.style.height = "100px";
-                this.alt = `Preview not available. Click to view ${item.filename} on site.`;
-                const textNode = document.createTextNode("View on EgonZippel.com");
-                // To prevent replacing multiple times if errors recur or if parent changes
-                if (this.parentNode && this.parentNode.contains(this)) {
-                    this.parentNode.replaceChild(textNode, this);
-                }
-            };
-
-            link.appendChild(img);
-            resultItemDiv.appendChild(link);
+            // Use new image element creation function
+            const imageLink = createImageElement(item);
+            resultItemDiv.appendChild(imageLink);
 
             const itemTitle = document.createElement('p');
             itemTitle.textContent = item.filename;
