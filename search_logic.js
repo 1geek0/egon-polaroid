@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadData() {
         statusMessage.textContent = 'Loading image data...';
         try {
-            const response = await fetch('image_metadata.json');
+            const response = await fetch('https://gist.githubusercontent.com/1geek0/8e8ca14f1b1455111a338cf124dbf123/raw/d76241eb67f99e1231e1f0c6098a3cfd9759f3bb/image_metadata.json');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
