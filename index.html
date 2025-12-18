@@ -33,6 +33,13 @@
                         <span class="button-glow"></span>
                     </button>
                 </div>
+                <div class="search-controls" style="width: 100%; display: flex; justify-content: flex-end; align-items: center; gap: 0.8rem;">
+                    <label for="sortOrder" style="color: #666; font-size: 0.9rem; font-family: 'Inter', sans-serif;">Sort by:</label>
+                    <select id="sortOrder" style="padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #e0e0e0; background: #ffffff; color: #1a1a1a; font-family: 'Inter', sans-serif; font-size: 0.9rem; cursor: pointer; outline: none;">
+                        <option value="asc">Oldest First</option>
+                        <option value="desc">Newest First</option>
+                    </select>
+                </div>
                 <div class="search-status">
                     <div id="statusMessage" class="status-text"></div>
                     <div id="resultsCount" class="results-counter"></div>
@@ -60,15 +67,6 @@
                         </ul>
                     </details>
                 </div>
-
-                <!-- <div style="text-align: center; margin-top: 2rem;">
-                    <a href="connection_explorer.html" class="cyber-button">
-                        <span class="button-text">EXPLORE CONNECTIONS</span>
-                    </a>
-                    <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--studio-text-secondary);">
-                        Discover deeper patterns and relationships across the archive
-                    </p>
-                </div> -->
             </div>
         </div>
 

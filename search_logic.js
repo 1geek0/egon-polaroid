@@ -78,14 +78,58 @@ document.addEventListener('DOMContentLoaded', () => {
             // Parse the HTML to extract the image URL
             const parser = new DOMParser();
             const doc = parser.parseFromString(htmlContent, 'text/html');
-            const imgElement = doc.getElementById('icLightBoxActiveImage');
 
-            if (imgElement && imgElement.src) {
-                const imageUrl = imgElement.src;
+            // Try multiple strategies to find the image
+            let imageUrl = null;
+
+            // Strategy 1: Look for icLightBoxActiveImage (primary)
+            const lightboxImg = doc.getElementById('icLightBoxActiveImage');
+            if (lightboxImg && lightboxImg.src) {
+                imageUrl = lightboxImg.src;
+            }
+
+            // Strategy 2: Look for other common image selectors as fallbacks
+            if (!imageUrl) {
+                const fallbackSelectors = [
+                    'img[src*=".jpg"]',
+                    'img[src*=".jpeg"]',
+                    'img[src*=".JPG"]',
+                    'img[src*=".JPEG"]',
+                    '.polaroid-image img',
+                    '.main-image img',
+                    'img.photo',
+                    'img'
+                ];
+
+                for (const selector of fallbackSelectors) {
+                    const img = doc.querySelector(selector);
+                    if (img && img.src && img.src.includes('http')) {
+                        imageUrl = img.src;
+                        console.log(`Found image using fallback selector: ${selector}`);
+                        break;
+                    }
+                }
+            }
+
+            if (imageUrl) {
+                // Ensure the URL is absolute
+                if (imageUrl.startsWith('//')) {
+                    imageUrl = 'https:' + imageUrl;
+                } else if (imageUrl.startsWith('/')) {
+                    const baseUrl = new URL(pageUrl).origin;
+                    imageUrl = baseUrl + imageUrl;
+                }
+
                 imageUrlCache.set(pageUrl, imageUrl);
                 return imageUrl;
             } else {
-                console.warn(`No icLightBoxActiveImage found for ${pageUrl}`);
+                console.warn(`No image found for ${pageUrl}. Available img elements:`,
+                    Array.from(doc.querySelectorAll('img')).map(img => ({
+                        id: img.id,
+                        class: img.className,
+                        src: img.src
+                    }))
+                );
                 imageUrlCache.set(pageUrl, null);
                 return null;
             }
@@ -205,22 +249,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function displayResults(resultsToDisplay, isInitialDisplay = false) {
         searchResultsContainer.innerHTML = '';
+        const sortOrder = document.getElementById('sortOrder').value; // 'asc' or 'desc'
+
+        // Sort results chronologically
+        const sortedResults = [...resultsToDisplay].sort((a, b) => {
+            let comparison = 0;
+            
+            // Validate and parse dates (default to 0 if missing/invalid)
+            const yearA = parseInt(a.year) || 0;
+            const yearB = parseInt(b.year) || 0;
+            const monthA = parseInt(a.month) || 0;
+            const monthB = parseInt(b.month) || 0;
+            const dayA = parseInt(a.day) || 0;
+            const dayB = parseInt(b.day) || 0;
+            const idxA = a.chronological_index_in_year || 0;
+            const idxB = b.chronological_index_in_year || 0;
+
+            // First sort by year
+            if (yearA !== yearB) {
+                comparison = yearA - yearB;
+            }
+            // Then by month
+            else if (monthA !== monthB) {
+                comparison = monthA - monthB;
+            }
+            // Then by day
+            else if (dayA !== dayB) {
+                comparison = dayA - dayB;
+            }
+            // Finally by chronological index within the same day
+            else {
+                comparison = idxA - idxB;
+            }
+
+            return sortOrder === 'desc' ? -comparison : comparison;
+        });
+
         if (isInitialDisplay) {
-            resultsCount.textContent = `Displaying first ${resultsToDisplay.length} of ${allImageData.length} images. Refine with search.`;
+            const rangeText = sortOrder === 'desc' ? 'newest' : 'first';
+            resultsCount.textContent = `Displaying ${rangeText} ${sortedResults.length} of ${allImageData.length} images. Refine with search.`;
         } else {
-            resultsCount.textContent = `${resultsToDisplay.length} image(s) found.`;
+            resultsCount.textContent = `${sortedResults.length} image(s) found.`;
         }
 
-        if (resultsToDisplay.length === 0 && !isInitialDisplay) {
+        if (sortedResults.length === 0 && !isInitialDisplay) {
             searchResultsContainer.innerHTML = '<p>No matching images found.</p>';
             return;
         }
-        if (resultsToDisplay.length === 0 && isInitialDisplay) {
+        if (sortedResults.length === 0 && isInitialDisplay) {
             resultsCount.textContent = `Enter search terms to find images among ${allImageData.length} items.`;
             return;
         }
 
-        resultsToDisplay.forEach(item => {
+        sortedResults.forEach(item => {
             const resultItemDiv = document.createElement('div');
             resultItemDiv.className = 'result-item';
 
@@ -235,11 +316,54 @@ document.addEventListener('DOMContentLoaded', () => {
             resultItemDiv.appendChild(itemTitle);
 
             if (item.ai_analysis) {
-                const ocrDiv = document.createElement('div');
-                ocrDiv.className = 'ocr-text';
-                const ocrText = item.ai_analysis.ocr_text || 'N/A';
-                ocrDiv.innerHTML = `<strong>OCR:</strong> ${ocrText.substring(0, 100)}${ocrText.length > 100 ? '...' : ''}`;
-                resultItemDiv.appendChild(ocrDiv);
+                const ocrText = item.ai_analysis.ocr_text || '';
+                if (ocrText && ocrText !== 'N/A') {
+                    const textDiv = document.createElement('div');
+                    textDiv.className = 'transcribed-text';
+                    textDiv.style.cssText = `
+                        margin-top: 8px;
+                        font-size: 0.85em;
+                        line-height: 1.4;
+                        color: #ccc;
+                        cursor: pointer;
+                        transition: color 0.2s ease;
+                    `;
+
+                    const isLong = ocrText.length > 100;
+                    let isExpanded = false;
+
+                    function updateDisplay() {
+                        if (isLong && !isExpanded) {
+                            textDiv.innerHTML = `
+                                ${ocrText.substring(0, 100)}...
+                                <span style="display: block; margin-top: 4px; font-size: 0.8em; color: #888;">⋯⋯⋯</span>
+                            `;
+                        } else {
+                            textDiv.innerHTML = ocrText;
+                        }
+                    }
+
+                    if (isLong) {
+                        textDiv.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            isExpanded = !isExpanded;
+                            updateDisplay();
+                        });
+
+                        textDiv.addEventListener('mouseenter', () => {
+                            if (!isExpanded) {
+                                textDiv.style.color = '#0ff';
+                            }
+                        });
+
+                        textDiv.addEventListener('mouseleave', () => {
+                            textDiv.style.color = '#ccc';
+                        });
+                    }
+
+                    updateDisplay();
+                    resultItemDiv.appendChild(textDiv);
+                }
 
                 const keywordsDiv = document.createElement('div');
                 keywordsDiv.className = 'keywords';
@@ -271,9 +395,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const sortOrder = document.getElementById('sortOrder').value;
+
         if (!query) {
-            // Display first 50 if query is empty
-            displayResults(allImageData.slice(0, 50), true);
+            // Display subset based on sort order (default 50 items)
+            let subset;
+            if (sortOrder === 'desc') {
+                // If sorting newest first, start with the most recent items (end of the array)
+                subset = allImageData.slice(-50);
+            } else {
+                // If sorting oldest first, start with the first items
+                subset = allImageData.slice(0, 50);
+            }
+            displayResults(subset, true);
             return;
         }
 
@@ -413,11 +547,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     searchButton.addEventListener('click', performSearch);
+
     searchInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') {
             performSearch();
         }
     });
+
+    document.getElementById('sortOrder').addEventListener('change', performSearch);
 
     loadData();
 }); 
