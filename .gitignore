@@ -1,0 +1,6 @@
+raw_data/
+connection_*
+.conda/
+*.env
+.DS_Store
+.idea/
