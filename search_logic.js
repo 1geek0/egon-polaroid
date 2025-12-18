@@ -365,11 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultItemDiv.appendChild(textDiv);
                 }
 
-                const keywordsDiv = document.createElement('div');
-                keywordsDiv.className = 'keywords';
-                const keywordsText = item.ai_analysis.keywords ? item.ai_analysis.keywords.join(', ') : 'N/A';
-                keywordsDiv.innerHTML = `<strong>Keywords:</strong> ${keywordsText}`;
-                resultItemDiv.appendChild(keywordsDiv);
+
             }
             // Display Lunr score if available (for debugging/refinement)
             if (item.score !== undefined) {
