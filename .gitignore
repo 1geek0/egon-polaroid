@@ -4,3 +4,6 @@ connection_*
 *.env
 .DS_Store
 .idea/
+scraped_images/
+*.json.bk
+image_metadata.json
