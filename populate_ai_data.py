@@ -2,6 +2,10 @@ import os
 import json
 import base64
 import time
+import csv
+import re
+import requests
+import shutil
 from openai import OpenAI
 import dotenv
 from tqdm import tqdm
@@ -9,8 +13,64 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 dotenv.load_dotenv()
 
+# --- Parsing Helper Functions ---
+
+def get_sortable_suffix(original_suffix_val):
+    """Creates a sortable key from the suffix part of a filename."""
+    suffix = original_suffix_val.strip()
+
+    if not suffix:
+        return "0"  # No suffix, sorts first
+
+    # Case 1: Purely alphabetical suffix (e.g., "B", "c", "GA")
+    if suffix.isalpha():
+        return f"A_{suffix.upper()}" # A_B, A_C, A_GA
+
+    # Case 2: Numeric prefix, possibly with alphabetical suffix (e.g., "1", "10", "2B")
+    match_num = re.match(r"^(\d+)(.*)$", suffix)
+    if match_num:
+        num_part = match_num.group(1)
+        alpha_part = match_num.group(2).upper()
+        return f"N_{num_part.zfill(3)}_{alpha_part}" # N_001_, N_010_, N_002_B
+
+    # Case 3: Dot-prefixed alphabetical (e.g., ".O", ".GA")
+    if suffix.startswith(".") and len(suffix) > 1 and suffix[1:].isalpha():
+        return f"P_{suffix[1:].upper()}" # P_O, P_GA
+    
+    # Case 4: "copy" related suffixes
+    if "copy" in suffix.lower():
+        normalized_copy_suffix = suffix.upper().replace("COPY", "_COPY_") # Isolate COPY
+        return f"Y_{normalized_copy_suffix}" # Y__COPY_, Y__COPY_A, Y_A_COPY_
+
+    # Fallback for other complex cases
+    return f"Z_{suffix.upper()}"
+
+
+def parse_filename(filename_str):
+    """Parses a filename string to extract date components, suffix, and extension."""
+    # Regex to capture YYYY-MM-DD, then any characters as suffix, then .extension
+    match = re.match(
+        r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})"
+        r"(?P<suffix_original>.*?)\.(?P<ext>[jJ][pP][eE]?[gG])$",
+        filename_str
+    )
+    if match:
+        data = match.groupdict()
+        original_suffix = data["suffix_original"]
+        return {
+            "year": data["year"],
+            "month": data["month"],
+            "day": data["day"],
+            "suffix_original": original_suffix,
+            "sortable_suffix": get_sortable_suffix(original_suffix),
+            "extension": data["ext"].lower()
+        }
+    return None
+
 # Configuration
 METADATA_FILE = "image_metadata.json"
+CSV_FILE = "polaroids_data.csv"
+SCRAPED_IMAGES_DIR = "scraped_images"
 API_KEY = os.environ.get("GEMINI_API_KEY")
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 MODEL_NAME = "gemini-2.5-flash"
@@ -22,7 +82,7 @@ PER_REQUEST_DELAY = 1 # Seconds to wait between individual requests within a wor
 # New combined prompt
 COMBINED_PROMPT = '''Analyze the attached image, which is a sketch. Provide the following information in a valid JSON object format:
 1. "ocr_text": Extract all text, including handwritten and sketched text. If no text is present, this should be an empty string. The artist often signs as "Egon", "Egon Zippel", or "Egon NYC" write similar text as this signature.
-2. "visual_description": A concise visual description of the sketch, focusing on the main subjects, style, and any prominent visual elements. Do not give general descriptions like "sketch", "drawing", "painting", etc. 10,000 such images are going to be processed this way.
+2. "visual_description": A concise visual description of the sketch, focusing on the main subjects, style, and any prominent visual elements. Do not give general descriptions like "sketch with a blue ink", "drawing", "painting", etc..
 3. "keywords": A list of 3-7 relevant keywords or short phrases that categorize or describe the main themes, objects, or concepts in the sketch. These should be strings in a list.
 
 Example JSON output format:
@@ -35,6 +95,124 @@ Example JSON output format:
 If the image cannot be processed or is unclear, return a JSON object with empty strings for "ocr_text" and "visual_description", and an empty list for "keywords".'''
 
 # --- Helper Functions ---
+def download_image(url, local_path):
+    """Downloads an image from a URL to a local path if it doesn't exist."""
+    if os.path.exists(local_path):
+        return True
+    
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        
+        response = requests.get(url, stream=True, timeout=20)
+        response.raise_for_status()
+        with open(local_path, 'wb') as out_file:
+            shutil.copyfileobj(response.raw, out_file)
+        return True
+    except Exception as e:
+        print(f"Error downloading {url}: {e}")
+        return False
+
+def sync_metadata_from_csv(csv_path, metadata_path, images_dir):
+    """
+    Reads the CSV, downloads images in parallel, and synchronizes with existing metadata JSON.
+    Preserves existing AI analysis.
+    """
+    # 1. Load existing metadata to preserve AI analysis
+    existing_data_map = {} # Key: filename -> item data
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, 'r') as f:
+                existing_list = json.load(f)
+                for item in existing_list:
+                    if "filename" in item:
+                        existing_data_map[item["filename"]] = item
+            print(f"Loaded {len(existing_list)} existing records from {metadata_path}.")
+        except json.JSONDecodeError:
+            print(f"Warning: Could not decode {metadata_path}. Starting fresh.")
+    
+    # 2. Process CSV
+    if not os.path.exists(csv_path):
+        print(f"Error: CSV file '{csv_path}' not found.")
+        return list(existing_data_map.values())
+
+    print(f"Syncing data from {csv_path} and downloading images...")
+    
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    # Helper function for parallel processing
+    def process_row_task(row):
+        image_url = row.get("image_url")
+        date_title_raw = row.get("date_title_raw")
+        
+        if not image_url or not date_title_raw:
+            return None
+
+        # Construct a filename. 
+        ext = ".jpg"
+        if ".png" in image_url.lower():
+            ext = ".png"
+            
+        filename = f"{date_title_raw}{ext}"
+        local_path = os.path.join(images_dir, filename)
+        
+        # Download if needed
+        if download_image(image_url, local_path):
+            # Check if we already have this item to preserve analysis
+            if filename in existing_data_map:
+                item = existing_data_map[filename]
+                item["local_path"] = local_path 
+            else:
+                # Create new item
+                parsed_info = parse_filename(filename)
+                
+                item = {
+                    "local_path": local_path,
+                    "filename": filename,
+                    "image_url": image_url,
+                    "ai_analysis": None
+                }
+                
+                if parsed_info:
+                    item.update({
+                        "year": parsed_info["year"],
+                        "month": parsed_info["month"],
+                        "day": parsed_info["day"],
+                        "suffix_original": parsed_info["suffix_original"],
+                        "sortable_suffix": parsed_info["sortable_suffix"],
+                        "extension": parsed_info["extension"]
+                    })
+                else:
+                    item["year"] = row.get("year")
+            return item
+        else:
+            print(f"Skipping {filename} due to download failure.")
+            return None
+
+    # Run downloads in parallel
+    new_data_list = []
+    DOWNLOAD_WORKERS = 20
+    
+    with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as executor:
+        futures = [executor.submit(process_row_task, row) for row in rows]
+        
+        for future in tqdm(as_completed(futures), total=len(rows), desc="Syncing CSV & Downloading"):
+            result = future.result()
+            if result:
+                new_data_list.append(result)
+            
+    # Save updated metadata
+    try:
+        with open(metadata_path, 'w') as f:
+            json.dump(new_data_list, f, indent=2)
+        print(f"Synced metadata saved to {metadata_path}. Total items: {len(new_data_list)}")
+    except IOError as e:
+        print(f"Error saving synced metadata: {e}")
+
+    return new_data_list
+
 def encode_image_to_base64(image_path):
     """Encodes an image file to a base64 string."""
     try:
@@ -149,14 +327,11 @@ def main():
         print("Error: GEMINI_API_KEY environment variable not set.")
         return
 
-    try:
-        with open(METADATA_FILE, 'r') as f:
-            all_data = json.load(f)
-    except FileNotFoundError:
-        print(f"Error: Metadata file '{METADATA_FILE}' not found. Please run process_images.py first.")
-        return
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from '{METADATA_FILE}'. File might be corrupted.")
+    # Sync and load data
+    all_data = sync_metadata_from_csv(CSV_FILE, METADATA_FILE, SCRAPED_IMAGES_DIR)
+
+    if not all_data:
+        print("No data loaded. Exiting.")
         return
 
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL) # Create one client instance
