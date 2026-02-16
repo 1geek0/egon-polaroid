@@ -7,7 +7,7 @@ import sys
 
 def scrape_polaroids():
     base_url = "https://egonzippel.com/polaroids"
-    current_year = 2025 # Based on prompt date
+    current_year = 2026 # Based on prompt date
     start_year = 1989
     
     # Range is inclusive of current_year
