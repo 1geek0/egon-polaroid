@@ -1,5 +1,0 @@
-beautifulsoup4
-requests
-openai
-tqdm
-python-dotenv
