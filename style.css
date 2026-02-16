@@ -309,23 +309,18 @@ body {
     color: var(--studio-text-secondary);
 }
 
-.search-tips details {
+.tips-container {
     background: var(--studio-bg-medium);
     border-radius: 8px;
     padding: 1rem;
     border: 1px solid var(--studio-border);
 }
 
-.search-tips summary {
-    cursor: pointer;
+.tips-title {
     font-weight: 500;
     color: var(--studio-primary);
     margin-bottom: 0.5rem;
     user-select: none;
-}
-
-.search-tips summary:hover {
-    color: var(--studio-secondary);
 }
 
 .search-tips ul {
