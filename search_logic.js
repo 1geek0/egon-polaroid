@@ -5,9 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessage = document.getElementById('statusMessage');
     const resultsCount = document.getElementById('resultsCount');
 
+    const DATA_URL = 'https://pub-2bf02060093645f29ead1fe093065db8.r2.dev/image_metadata_search.json';
+
     let allImageData = [];
     let lunrIndex;
-    let imageUrlCache = new Map(); // Cache for extracted image URLs
 
     function initializeLunrIndex(data) {
         lunrIndex = lunr(function () {
@@ -34,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadData() {
         statusMessage.textContent = 'Loading image data...';
         try {
-            const response = await fetch('https://gist.githubusercontent.com/1geek0/8e8ca14f1b1455111a338cf124dbf123/raw/d76241eb67f99e1231e1f0c6098a3cfd9759f3bb/image_metadata.json');
+            const response = await fetch(DATA_URL);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -57,192 +58,69 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function extractImageUrlFromPage(pageUrl) {
-        // Check cache first
-        if (imageUrlCache.has(pageUrl)) {
-            return imageUrlCache.get(pageUrl);
-        }
-
-        try {
-            // Use a CORS proxy to fetch the page content
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(pageUrl)}`;
-            const response = await fetch(proxyUrl);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const htmlContent = data.contents;
-
-            // Parse the HTML to extract the image URL
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlContent, 'text/html');
-
-            // Try multiple strategies to find the image
-            let imageUrl = null;
-
-            // Strategy 1: Look for icLightBoxActiveImage (primary)
-            const lightboxImg = doc.getElementById('icLightBoxActiveImage');
-            if (lightboxImg && lightboxImg.src) {
-                imageUrl = lightboxImg.src;
-            }
-
-            // Strategy 2: Look for other common image selectors as fallbacks
-            if (!imageUrl) {
-                const fallbackSelectors = [
-                    'img[src*=".jpg"]',
-                    'img[src*=".jpeg"]',
-                    'img[src*=".JPG"]',
-                    'img[src*=".JPEG"]',
-                    '.polaroid-image img',
-                    '.main-image img',
-                    'img.photo',
-                    'img'
-                ];
-
-                for (const selector of fallbackSelectors) {
-                    const img = doc.querySelector(selector);
-                    if (img && img.src && img.src.includes('http')) {
-                        imageUrl = img.src;
-                        console.log(`Found image using fallback selector: ${selector}`);
-                        break;
-                    }
-                }
-            }
-
-            if (imageUrl) {
-                // Ensure the URL is absolute
-                if (imageUrl.startsWith('//')) {
-                    imageUrl = 'https:' + imageUrl;
-                } else if (imageUrl.startsWith('/')) {
-                    const baseUrl = new URL(pageUrl).origin;
-                    imageUrl = baseUrl + imageUrl;
-                }
-
-                imageUrlCache.set(pageUrl, imageUrl);
-                return imageUrl;
-            } else {
-                console.warn(`No image found for ${pageUrl}. Available img elements:`,
-                    Array.from(doc.querySelectorAll('img')).map(img => ({
-                        id: img.id,
-                        class: img.className,
-                        src: img.src
-                    }))
-                );
-                imageUrlCache.set(pageUrl, null);
-                return null;
-            }
-        } catch (error) {
-            console.error(`Failed to extract image URL from ${pageUrl}:`, error);
-            imageUrlCache.set(pageUrl, null);
-            return null;
-        }
-    }
-
     function createImageElement(item) {
         const link = document.createElement('a');
-        link.href = item.display_page_url;
+        link.href = item.source_page || item.display_page_url || '#';
         link.target = '_blank';
         link.title = `View details for ${item.filename} on EgonZippel.com`;
         link.style.display = 'block';
         link.style.textDecoration = 'none';
 
-        // Create a styled placeholder that looks better
-        const placeholder = document.createElement('div');
-        placeholder.style.cssText = `
-            width: 200px;
-            height: 150px;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-            border: 2px solid #333;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #888;
-            font-family: Inter, sans-serif;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        `;
+        const imgSrc = item.thumbnail_url || item.image_url;
 
-        placeholder.innerHTML = `
-            <div style="font-size: 0.9em; font-weight: 500; margin-bottom: 8px; text-align: center; padding: 0 10px;">
-                ${item.filename}
-            </div>
-            <div style="font-size: 0.7em; opacity: 0.7; text-align: center;">
-                Loading preview...
-            </div>
-        `;
+        if (imgSrc) {
+            const img = document.createElement('img');
+            img.src = imgSrc;
+            img.alt = item.filename;
+            img.loading = 'lazy';
+            img.style.cssText = `
+                width: 200px;
+                height: 150px;
+                object-fit: cover;
+                border-radius: 8px;
+                border: 2px solid #333;
+                transition: all 0.3s ease;
+            `;
 
-        // Add hover effect
-        placeholder.addEventListener('mouseenter', () => {
-            placeholder.style.borderColor = '#0ff';
-            placeholder.style.transform = 'scale(1.02)';
-            placeholder.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
-        });
+            img.addEventListener('mouseenter', () => {
+                img.style.borderColor = '#0ff';
+                img.style.transform = 'scale(1.02)';
+                img.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
+            });
 
-        placeholder.addEventListener('mouseleave', () => {
-            placeholder.style.borderColor = '#333';
-            placeholder.style.transform = 'scale(1)';
-            placeholder.style.boxShadow = 'none';
-        });
+            img.addEventListener('mouseleave', () => {
+                img.style.borderColor = '#333';
+                img.style.transform = 'scale(1)';
+                img.style.boxShadow = 'none';
+            });
 
-        // Start with placeholder, then try to load the actual image
-        link.appendChild(placeholder);
-
-        // Asynchronously extract and load the real image
-        extractImageUrlFromPage(item.display_page_url).then(imageUrl => {
-            if (imageUrl) {
-                // Create the actual image element
-                const img = document.createElement('img');
-                img.src = imageUrl;
-                img.style.cssText = `
-                    width: 200px;
-                    height: 150px;
-                    object-fit: cover;
-                    border-radius: 8px;
-                    border: 2px solid #333;
-                    transition: all 0.3s ease;
-                `;
-
-                img.onload = function () {
-                    // Replace placeholder with actual image
-                    if (link.contains(placeholder)) {
-                        link.removeChild(placeholder);
-                        link.appendChild(img);
-                    }
-                };
-
-                img.onerror = function () {
-                    // Keep placeholder but update message
-                    const loadingDiv = placeholder.querySelector('div:last-child');
-                    if (loadingDiv) {
-                        loadingDiv.textContent = 'View on EgonZippel.com →';
-                    }
-                };
-
-                // Add hover effects to the image
-                img.addEventListener('mouseenter', () => {
-                    img.style.borderColor = '#0ff';
-                    img.style.transform = 'scale(1.02)';
-                    img.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
-                });
-
-                img.addEventListener('mouseleave', () => {
-                    img.style.borderColor = '#333';
-                    img.style.transform = 'scale(1)';
-                    img.style.boxShadow = 'none';
-                });
-            } else {
-                // Update placeholder to show it's ready to click
-                const loadingDiv = placeholder.querySelector('div:last-child');
-                if (loadingDiv) {
-                    loadingDiv.textContent = 'View on EgonZippel.com →';
-                }
-            }
-        });
+            link.appendChild(img);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = `
+                width: 200px;
+                height: 150px;
+                background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+                border: 2px solid #333;
+                border-radius: 8px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                color: #888;
+                font-family: Inter, sans-serif;
+                transition: all 0.3s ease;
+            `;
+            placeholder.innerHTML = `
+                <div style="font-size: 0.9em; font-weight: 500; margin-bottom: 8px; text-align: center; padding: 0 10px;">
+                    ${item.filename}
+                </div>
+                <div style="font-size: 0.7em; opacity: 0.7; text-align: center;">
+                    View on EgonZippel.com &rarr;
+                </div>
+            `;
+            link.appendChild(placeholder);
+        }
 
         return link;
     }
