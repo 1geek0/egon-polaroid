@@ -40,7 +40,7 @@ def scrape_polaroids():
                 
             print(f"  Found {len(containers)} images for {year}.")
             
-            for container in containers:
+            for img_index, container in enumerate(containers):
                 try:
                     # Extract Link and Image URL
                     # <a href="..." ... class="thumb" ...>
@@ -85,7 +85,7 @@ def scrape_polaroids():
                         "date_title_raw": date_title,
                         "image_url": full_image_url,
                         "thumbnail_url": thumbnail_url,
-                        "source_page": url
+                        "source_page": f"{url}/1/{img_index}"
                     })
                     
                 except Exception as e:
