@@ -7,3 +7,5 @@ connection_*
 scraped_images/
 *.json.bk
 image_metadata.json
+.wrangler/
+worker/node_modules/
