@@ -163,7 +163,9 @@ def sync_metadata_from_csv(csv_path, metadata_path, images_dir):
             # Check if we already have this item to preserve analysis
             if filename in existing_data_map:
                 item = existing_data_map[filename]
-                item["local_path"] = local_path 
+                item["local_path"] = local_path
+                item["thumbnail_url"] = row.get("thumbnail_url")
+                item["source_page"] = row.get("source_page")
             else:
                 # Create new item
                 parsed_info = parse_filename(filename)
@@ -172,6 +174,8 @@ def sync_metadata_from_csv(csv_path, metadata_path, images_dir):
                     "local_path": local_path,
                     "filename": filename,
                     "image_url": image_url,
+                    "thumbnail_url": row.get("thumbnail_url"),
+                    "source_page": row.get("source_page"),
                     "ai_analysis": None
                 }
                 
