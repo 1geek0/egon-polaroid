@@ -74,18 +74,19 @@ document.addEventListener('DOMContentLoaded', () => {
             img.alt = item.filename;
             img.loading = 'lazy';
             img.style.cssText = `
-                width: 200px;
-                height: 150px;
-                object-fit: cover;
+                width: 100%;
+                height: auto;
+                display: block;
+                object-fit: contain;
                 border-radius: 8px;
                 border: 2px solid #333;
                 transition: all 0.3s ease;
             `;
 
             img.addEventListener('mouseenter', () => {
-                img.style.borderColor = '#0ff';
+                img.style.borderColor = '#f58989';
                 img.style.transform = 'scale(1.02)';
-                img.style.boxShadow = '0 5px 15px rgba(0, 255, 255, 0.3)';
+                img.style.boxShadow = '0 5px 15px rgba(245, 137, 137, 0.3)';
             });
 
             img.addEventListener('mouseleave', () => {
@@ -98,8 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             const placeholder = document.createElement('div');
             placeholder.style.cssText = `
-                width: 200px;
-                height: 150px;
+                width: 100%;
+                aspect-ratio: 4 / 3;
                 background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
                 border: 2px solid #333;
                 border-radius: 8px;
@@ -208,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     `;
 
                     const isLong = ocrText.length > 100;
-                    let isExpanded = false;
+                    let isExpanded = true;
 
                     function updateDisplay() {
                         if (isLong && !isExpanded) {
@@ -230,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         textDiv.addEventListener('mouseenter', () => {
                             if (!isExpanded) {
-                                textDiv.style.color = '#0ff';
+                                textDiv.style.color = '#f58989';
                             }
                         });
 
@@ -325,11 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (cleanTerm.length > 1) {
                         textQueryTermsForLunr.push(cleanTerm + '~1');
                     }
-                } else if (term.length >= 6) {
-                    // Only apply fuzzy matching to longer terms where typos are more likely
+                } else if (term.length >= 8) {
+                    // Auto-fuzzy only for clearly long terms. The previous 6-char threshold
+                    // caused false positives like "claude" matching "cloud" (edit distance 1).
                     textQueryTermsForLunr.push(term + '~1');
                 } else {
-                    // Use exact matching for shorter terms to avoid false positives like "table" matching "cable"
                     textQueryTermsForLunr.push(term);
                 }
             }
