@@ -8,6 +8,31 @@
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lunr/lunr.min.js"></script>
+    <style>
+        /* Inlined so the page renders correctly when only index.html + search_logic.js are copied. */
+        .title-main {
+            font-size: 1rem;
+            color: #f58989;
+            font-weight: 700;
+            letter-spacing: 0;
+            line-height: 1.4;
+        }
+
+        .title-sub {
+            font-size: clamp(0.9rem, 2vw, 1.2rem);
+            color: #e53935;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .result-item img {
+            height: auto;
+            max-height: 300px;
+            margin-bottom: 1rem;
+            transition: all 0.2s ease;
+        }
+    </style>
 </head>
 
 <body>
@@ -17,9 +42,7 @@
     <div class="main-container">
         <div class="header-section">
             <h1 class="cyber-title">
-                <span class="title-main">EGON ZIPPEL</span>
-                <span class="title-sub">POLAROID ARCHIVE</span>
-                <span class="title-accent">Daily sketches and observations, 1989-2025</span>
+                <span class="title-main">Semantic Search: Look for names, dates, places...</span>
             </h1>
         </div>
 
